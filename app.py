@@ -1,124 +1,170 @@
 import streamlit as st
-import pandas as pd
-import plotly.express as px
-from tax_calculator import calculate_tax_breakdown, get_optimizer_tip
 
-# 1. ตั้งค่าหน้าเว็บ ซ่อน Sidebar และตั้งเป็นแบบ Centered เพื่อให้อ่านง่ายบนมือถือ
+# 1. ตั้งค่าหน้าเว็บให้คลีน ซ่อนเมนู และจัดกึ่งกลางเพื่อมือถือ
 st.set_page_config(
-    page_title="Sasinapa - ระบบคำนวณภาษี",
+    page_title="Sasinapa - โปรแกรมคำนวณ VAT",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-# 2. ปรับแต่ง CSS ลบเมนูรกๆ ออก, ทำ Footer แบบ iTAX, และปรับฟอนต์ให้คลีน
+# 2. ปรับแต่ง CSS จำลองหน้าตาแบบ iTAX
 st.markdown("""
     <style>
-    /* ซ่อนเมนูแฮมเบอร์เกอร์และ Footer ของ Streamlit */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    /* ซ่อนเมนู Streamlit */
+    #MainMenu, footer, header {visibility: hidden;}
     
-    /* ปรับแต่งช่องกรอกข้อมูลให้ใหญ่และกดง่ายบนมือถือ */
+    /* ปรับพื้นหลังแอปให้เป็นสีเทาอ่อน สบายตา */
+    .stApp { background-color: #f7f9fc; }
+    
+    /* ตกแต่งช่องกรอกตัวเลขให้ใหญ่เหมือนเครื่องคิดเลข (iTAX Style) */
     div[data-baseweb="input"] {
-        border-radius: 8px;
+        background-color: #ffffff;
+        border-radius: 12px;
+        border: 2px solid #e2e8f0;
+        padding: 5px;
+    }
+    div[data-baseweb="input"] input {
+        font-size: 32px !important;
+        font-weight: bold;
+        text-align: right;
+        color: #1e293b;
     }
     
-    /* สไตล์สำหรับ Footer แบบ Sasinapa (อ้างอิงจากต้นฉบับสีเขียวเข้ม) */
+    /* กล่องใบเสร็จสรุปผล (Receipt Card) */
+    .receipt-card {
+        background: #ffffff;
+        padding: 30px;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        margin-top: 10px;
+        margin-bottom: 40px;
+    }
+    .receipt-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 16px;
+        color: #64748b;
+        padding: 12px 0;
+        border-bottom: 1px dashed #e2e8f0;
+    }
+    .receipt-row:last-child {
+        border-bottom: none;
+    }
+    .receipt-row.total {
+        font-weight: bold;
+        color: #0f172a;
+        font-size: 18px;
+        border-bottom: 2px solid #cbd5e1;
+    }
+    .receipt-row.net {
+        font-weight: bold;
+        color: #059669; /* สีเขียว Sasinapa */
+        font-size: 24px;
+        padding-top: 20px;
+    }
+    .receipt-value {
+        font-family: monospace; /* ฟอนต์ตัวเลขให้อ่านง่าย */
+        font-size: 18px;
+    }
+    .receipt-value.net-value {
+        font-size: 28px;
+    }
+    .receipt-value.deduct {
+        color: #ef4444; /* สีแดงสำหรับยอดหัก */
+    }
+    
+    /* Sasinapa Footer */
     .sasinapa-footer {
-        background-color: #2E4B40;
-        color: #FFFFFF;
+        background-color: #1e293b;
+        color: #f8fafc;
         padding: 40px 20px;
-        margin-top: 60px;
-        border-radius: 10px 10px 0 0;
+        margin-top: 40px;
+        border-radius: 16px 16px 0 0;
         font-family: sans-serif;
     }
-    .sasinapa-footer h2 {
-        color: #FFFFFF;
-        font-weight: 700;
-        margin-bottom: 10px;
-    }
-    .sasinapa-footer h4 {
-        color: #FFFFFF;
-        font-weight: bold;
-        margin-top: 20px;
-        margin-bottom: 10px;
-        font-size: 16px;
-    }
-    .sasinapa-footer p {
-        color: #B0C4B1;
-        font-size: 14px;
-        line-height: 1.6;
-    }
-    .sasinapa-footer a {
-        color: #B0C4B1;
-        text-decoration: none;
-        display: block;
-        margin-bottom: 8px;
-    }
-    .sasinapa-footer a:hover {
-        color: #FFFFFF;
-    }
+    .sasinapa-footer h2 { color: #f8fafc; font-weight: 700; margin-bottom: 10px; }
+    .sasinapa-footer h4 { color: #f8fafc; font-weight: bold; margin-top: 20px; margin-bottom: 10px; font-size: 16px; }
+    .sasinapa-footer p { color: #94a3b8; font-size: 14px; line-height: 1.6; }
+    .sasinapa-footer a { color: #94a3b8; text-decoration: none; display: block; margin-bottom: 8px; }
+    .sasinapa-footer a:hover { color: #f8fafc; }
     </style>
 """, unsafe_allow_html=True)
 
-# ----------------- ส่วนหัวของเว็บ -----------------
-st.title("ระบบคำนวณภาษี Sasinapa")
-st.markdown("กรอกตัวเลขรายได้ของคุณ ระบบจะคำนวณภาษีให้ทันที (ไม่ต้องมีตัวเลขตั้งต้น พิมพ์ง่ายบนมือถือ)")
+# ----------------- ส่วนหัว -----------------
+st.markdown("<h2 style='text-align: center; color: #0f172a; font-weight: bold; margin-bottom: 5px;'>โปรแกรมคำนวณ VAT</h2>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #64748b; margin-bottom: 30px;'>คำนวณภาษีมูลค่าเพิ่ม 7% และหัก ณ ที่จ่าย (Sasinapa)</p>", unsafe_allow_html=True)
 
-# ----------------- ย้ายช่องกรอกข้อมูลมาไว้ตรงกลาง (ไม่ใช้ Sidebar) -----------------
-st.subheader("1. ข้อมูลรายได้ (บาท)")
-# ใช้ value=None และ placeholder เพื่อให้ช่องว่างเปล่าตอนเริ่ม พิมพ์บนมือถือได้เลยไม่ต้องกดลบ
-salary_input = st.number_input("เงินเดือนรวมทั้งปี", min_value=0, value=None, placeholder="เช่น 600000", step=10000)
-bonus_input = st.number_input("โบนัสและเงินพิเศษ", min_value=0, value=None, placeholder="เช่น 50000", step=5000)
-other_input = st.number_input("รายได้อื่นๆ", min_value=0, value=None, placeholder="0", step=5000)
-wht_input = st.number_input("ภาษีหัก ณ ที่จ่ายสะสม (ถ้ามี)", min_value=0, value=None, placeholder="0", step=1000)
+# ----------------- ส่วนรับข้อมูล -----------------
+# 1. ประเภท VAT
+vat_type = st.radio("รูปแบบราคา", ["ราคานี้ยังไม่รวม VAT", "ราคานี้รวม VAT แล้ว"], horizontal=True)
 
-# แปลงค่า None เป็น 0 เพื่อนำไปคำนวณ
-salary_yearly = salary_input if salary_input else 0
-bonus_yearly = bonus_input if bonus_input else 0
-other_income = other_input if other_input else 0
-wht_paid = wht_input if wht_input else 0
+# 2. ช่องกรอกเงินขนาดใหญ่ (ว่างเปล่าตอนเริ่มต้น)
+amount = st.number_input("จำนวนเงิน (บาท)", min_value=0.0, value=None, placeholder="0.00", step=1000.0)
+val_amount = amount if amount else 0.0
 
-total_income = salary_yearly + bonus_yearly + other_income
-deduct_expense = min(total_income * 0.5, 100000)
+# 3. หัก ณ ที่จ่าย
+wht_options = {
+    "ไม่มีหัก ณ ที่จ่าย (0%)": 0,
+    "ค่าขนส่ง (1%)": 1,
+    "ค่าโฆษณา (2%)": 2,
+    "ค่าบริการ / รับจ้าง (3%)": 3,
+    "ค่าเช่า / นักแสดง (5%)": 5
+}
+wht_choice = st.selectbox("อัตราภาษีหัก ณ ที่จ่าย", list(wht_options.keys()), index=3) # ตั้งค่าเริ่มต้นที่ 3% เหมือน iTAX
+wht_rate = wht_options[wht_choice]
 
-st.markdown("---")
-st.subheader("2. ข้อมูลค่าลดหย่อน (บาท)")
-personal_deduction = 60000
-sso_input = st.number_input("เงินสมทบประกันสังคม", min_value=0, max_value=9000, value=None, placeholder="สูงสุด 9000")
-thaiesg_input = st.number_input("กองทุน Thai ESG", min_value=0, max_value=300000, value=None, placeholder="0")
-rmf_input = st.number_input("กองทุน RMF", min_value=0, max_value=500000, value=None, placeholder="0")
+# ----------------- ระบบประมวลผล & การแสดงผลแบบใบเสร็จ -----------------
+if val_amount > 0:
+    # คำนวณ VAT
+    if vat_type == "ราคานี้ยังไม่รวม VAT":
+        base = val_amount
+        vat = base * 0.07
+        total_with_vat = base + vat
+    else: # ราคานี้รวม VAT แล้ว
+        base = val_amount * 100 / 107
+        vat = val_amount - base
+        total_with_vat = val_amount
+    
+    # คำนวณหัก ณ ที่จ่าย
+    wht = base * (wht_rate / 100)
+    net = total_with_vat - wht
 
-sso = sso_input if sso_input else 0
-thai_esg = thaiesg_input if thaiesg_input else 0
-rmf = rmf_input if rmf_input else 0
-
-total_deductions = personal_deduction + sso + thai_esg + rmf
-
-# ----------------- ส่วนแสดงผล -----------------
-st.markdown("---")
-st.subheader("📊 ภาระภาษีเบื้องต้น")
-
-# เรียกใช้ฟังก์ชันคำนวณ
-result = calculate_tax_breakdown(total_income, deduct_expense, total_deductions, wht_paid)
-
-# แสดงผลแบบกล่องขนาดใหญ่
-col1, col2 = st.columns(2)
-col1.metric("รายได้รวมทั้งปี", f"{total_income:,.0f} บาท")
-col2.metric("เงินได้สุทธิ", f"{result['net_income']:,.0f} บาท")
-
-col3, col4 = st.columns(2)
-col3.metric("อัตราภาษีสูงสุด", f"{result['highest_rate_percent']}%")
-
-diff = result["tax_difference"]
-if diff > 0:
-    col4.metric("ภาษีที่ต้องชำระเพิ่ม", f"{diff:,.0f} บาท")
+    # สร้างโครงสร้าง HTML สำหรับใบเสร็จ
+    html_receipt = f"""
+    <div class="receipt-card">
+        <div class="receipt-row">
+            <span>มูลค่าสินค้า/บริการ</span>
+            <span class="receipt-value">฿ {base:,.2f}</span>
+        </div>
+        <div class="receipt-row">
+            <span>ภาษีมูลค่าเพิ่ม (VAT 7%)</span>
+            <span class="receipt-value">฿ {vat:,.2f}</span>
+        </div>
+        <div class="receipt-row total">
+            <span>ราคารวมภาษีมูลค่าเพิ่ม</span>
+            <span class="receipt-value">฿ {total_with_vat:,.2f}</span>
+        </div>
+        <div class="receipt-row">
+            <span>หัก ณ ที่จ่าย ({wht_rate}%)</span>
+            <span class="receipt-value deduct">- ฿ {wht:,.2f}</span>
+        </div>
+        <div class="receipt-row net">
+            <span>ยอดชำระสุทธิ</span>
+            <span class="receipt-value net-value">฿ {net:,.2f}</span>
+        </div>
+    </div>
+    """
+    st.markdown(html_receipt, unsafe_allow_html=True)
 else:
-    col4.metric("ภาษีที่ได้รับคืน", f"{abs(diff):,.0f} บาท")
+    # กรณีที่ยังไม่ได้กรอกตัวเลข
+    html_empty = """
+    <div class="receipt-card" style="text-align: center; color: #94a3b8; padding: 50px 20px;">
+        กรุณาระบุจำนวนเงินเพื่อดูผลการคำนวณ
+    </div>
+    """
+    st.markdown(html_empty, unsafe_allow_html=True)
 
-st.info(get_optimizer_tip(result["highest_rate_percent"]))
-
-# ----------------- Footer แบบ Sasinapa -----------------
+# ----------------- Footer Sasinapa -----------------
 footer_html = """
 <div class="sasinapa-footer">
     <div style="display: flex; flex-wrap: wrap; gap: 30px;">
