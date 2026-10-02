@@ -9,21 +9,16 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 2. ปรับแต่ง CSS ให้คลีนแบบ Finnomena
+# 2. ปรับแต่ง CSS ให้คลีนแบบ Finnomena / iTAX
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    div[data-baseweb="input"] {
-        border-radius: 8px;
-    }
+    div[data-baseweb="input"] { border-radius: 8px; }
     
-    /* ตกแต่งแท็บหลักให้ดูโดดเด่น */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 20px;
-    }
+    .stTabs [data-baseweb="tab-list"] { gap: 15px; }
     .stTabs [data-baseweb="tab"] {
         height: 50px;
         white-space: pre-wrap;
@@ -34,23 +29,49 @@ st.markdown("""
         font-weight: 600;
         font-size: 16px;
     }
+    
+    /* สไตล์สำหรับการ์ดประกัน */
+    .ins-card {
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+    }
+    .ins-title { font-size: 20px; font-weight: bold; color: #0f172a; margin-bottom: 5px;}
+    .ins-company { font-size: 14px; color: #64748b; margin-bottom: 15px; }
+    .ins-highlight { color: #059669; font-weight: bold; }
+    .ins-btn {
+        background-color: #0f172a;
+        color: white;
+        padding: 10px 15px;
+        text-align: center;
+        border-radius: 8px;
+        text-decoration: none;
+        display: block;
+        margin-top: 10px;
+        font-weight: bold;
+    }
+    .ins-btn:hover { background-color: #334155; color: white; }
     </style>
 """, unsafe_allow_html=True)
 
 # ----------------- ส่วนหัว -----------------
 st.title("ระบบคำนวณและวางแผนภาษี Sasinapa")
-st.markdown("เครื่องมือประเมินภาษีแบบครบวงจร พร้อมแหล่งความรู้เรื่องการลงทุนเพื่อลดหย่อนภาษี")
+st.markdown("เครื่องมือประเมินภาษีแบบครบวงจร พร้อมเลือกซื้อประกันเพื่อลดหย่อนภาษี")
 st.divider()
 
-# ----------------- สร้างเมนูหลัก 3 แท็บ -----------------
-main_tab1, main_tab2, main_tab3 = st.tabs([
+# ----------------- สร้างเมนูหลัก 4 แท็บ -----------------
+main_tab1, main_tab2, main_tab3, main_tab4 = st.tabs([
     "🧮 คำนวณภาษีบุคคลธรรมดา", 
     "🏢 ประเมินภาษีธุรกิจ (SME)", 
-    "📚 แหล่งความรู้ & ตัวช่วยลดหย่อน"
+    "🛒 ช็อปปิ้งประกันลดหย่อน",
+    "📚 แหล่งความรู้ & ลิงก์"
 ])
 
 # ==========================================
-# แท็บที่ 1: ภาษีบุคคลธรรมดา (ฟังก์ชันเดิมที่สมบูรณ์แล้ว)
+# แท็บที่ 1: ภาษีบุคคลธรรมดา
 # ==========================================
 with main_tab1:
     col_input, col_result = st.columns([1, 1.2], gap="large")
@@ -68,7 +89,6 @@ with main_tab1:
         thaiesg = st.number_input("กองทุน Thai ESG", min_value=0, max_value=300000, value=None, placeholder="0")
         rmf = st.number_input("กองทุน RMF", min_value=0, max_value=500000, value=None, placeholder="0")
 
-    # ประมวลผล
     total_income = (salary or 0) + (bonus or 0) + (other_inc or 0)
     wht_paid = (wht or 0)
     deduct_expense = min(total_income * 0.5, 100000)
@@ -78,7 +98,6 @@ with main_tab1:
         st.subheader("สรุปภาระภาษีของคุณ")
         if total_income > 0:
             result = calculate_tax_breakdown(total_income, deduct_expense, total_deductions, wht_paid)
-            
             mc1, mc2 = st.columns(2)
             mc1.metric("รายได้รวมทั้งปี", f"{total_income:,.0f} บาท")
             mc2.metric("เงินได้สุทธิ", f"{result['net_income']:,.0f} บาท")
@@ -122,91 +141,107 @@ with main_tab1:
 with main_tab2:
     st.subheader("🏢 ประเมินภาษีเงินได้นิติบุคคล (สำหรับ SME)")
     st.markdown("เงื่อนไข SME: ทุนจดทะเบียนไม่เกิน 5 ล้านบาท และรายได้ทั้งปีไม่เกิน 30 ล้านบาท")
-    
     c_input, c_result = st.columns([1, 1.2], gap="large")
     with c_input:
         net_profit = st.number_input("กำไรสุทธิประจำปี (บาท)", min_value=0, value=None, placeholder="เช่น 1500000", step=100000)
         profit = net_profit if net_profit else 0
-        
     with c_result:
-        # คำนวณภาษี SME: กำไร 0-3 แสน = ยกเว้น | 3 แสน-3 ล้าน = 15% | เกิน 3 ล้าน = 20%
         if profit <= 300000:
-            corp_tax = 0
-            rate_text = "ยกเว้นภาษี"
+            corp_tax, rate_text = 0, "ยกเว้นภาษี"
         elif profit <= 3000000:
-            corp_tax = (profit - 300000) * 0.15
-            rate_text = "15%"
+            corp_tax, rate_text = (profit - 300000) * 0.15, "15%"
         else:
-            corp_tax = ((3000000 - 300000) * 0.15) + ((profit - 3000000) * 0.20)
-            rate_text = "20%"
+            corp_tax, rate_text = ((3000000 - 300000) * 0.15) + ((profit - 3000000) * 0.20), "20%"
             
         if profit > 0:
             st.metric("ฐานอัตราภาษีของคุณ", rate_text)
             st.metric("ภาษีธุรกิจที่ต้องชำระ", f"{corp_tax:,.2f} บาท")
-            st.info("💡 ข้อแนะนำ: การจดทะเบียนเป็นบริษัทช่วยประหยัดภาษีได้มากกว่าบุคคลธรรมดา หากคุณมีกำไรสุทธิเกิน 1 ล้านบาทขึ้นไป")
         else:
             st.caption("กรุณาระบุกำไรสุทธิ เพื่อดูผลประเมิน")
 
 # ==========================================
-# แท็บที่ 3: แหล่งความรู้, ข่าวสาร และลิงก์
+# แท็บที่ 3: ช็อปปิ้งประกัน (Shop iTAX Style)
 # ==========================================
 with main_tab3:
-    st.markdown("#### ตัวช่วยและแหล่งความรู้ในการบริหารภาษี")
+    st.subheader("ค้นหาแผนประกันลดหย่อนภาษีที่เหมาะกับคุณ")
     
-    with st.expander("📈 หุ้น (Stocks) และภาษี"):
-        st.write("""
-        - **กำไรจากการขายหุ้น (Capital Gain):** ยกเว้นภาษี หากลงทุนในตลาดหลักทรัพย์แห่งประเทศไทย (SET)
-        - **เงินปันผล (Dividend):** ถูกหักภาษี ณ ที่จ่าย 10% (แต่สามารถเลือกนำไปคำนวณรวมปลายปีเพื่อขอ **เครดิตภาษีเงินปันผล** คืนได้ หากฐานภาษีของคุณต่ำ)
-        - 🌐 [อ่านเพิ่มเติม: ความรู้เรื่องภาษีหุ้นจาก SET](https://www.set.or.th/)
-        """)
-
-    with st.expander("🥇 ทองคำ (Gold)"):
-        st.write("""
-        - **ทองคำแท่ง/รูปพรรณ:** กำไรจากการขาย "ทองคำจริง" ที่ซื้อไว้เก็งกำไรส่วนตัว **ได้รับการยกเว้นภาษีเงินได้**
-        - **กองทุนทองคำ (Gold Mutual Fund):** กำไรจากการขายคืนหน่วยลงทุนจะได้รับการยกเว้นภาษี แต่เงินปันผลจากกองทุนจะถูกหัก 10%
-        - 🌐 [เช็คราคาทองคำวันนี้: สมาคมค้าทองคำ](https://www.goldtraders.or.th/)
-        """)
-
-    with st.expander("📊 กองทุนรวม (Mutual Funds) สำหรับลดหย่อนภาษี"):
-        st.write("""
-        - **Thai ESG (กองทุนเพื่อความยั่งยืน):** ลดหย่อนได้สูงสุด 30% ของรายได้ แต่ไม่เกิน 300,000 บาท (ถือครอง 5 ปี นับจากวันที่ซื้อ)
-        - **RMF (กองทุนเพื่อการเลี้ยงชีพ):** ลดหย่อนได้สูงสุด 30% ของรายได้ แต่ไม่เกิน 500,000 บาท (ถือจนถึงอายุ 55 ปี)
-        - **SSF (กองทุนรวมเพื่อการออม):** ลดหย่อนได้สูงสุด 30% ของรายได้ แต่ไม่เกิน 200,000 บาท (ถือครอง 10 ปีเต็ม)
-        - *หมายเหตุ: RMF + SSF + กบข. + ประกันบำนาญ รวมกันต้องไม่เกิน 500,000 บาท*
-        - 🌐 [แนะนำกองทุน: Finnomena](https://www.finnomena.com/)
-        """)
-
-    with st.expander("🛡️ ประกันชีวิตและสุขภาพ"):
-        st.write("""
-        - **ประกันชีวิตทั่วไป:** ลดหย่อนได้ตามจริง สูงสุดไม่เกิน 100,000 บาท
-        - **ประกันสุขภาพ:** ลดหย่อนได้สูงสุด 25,000 บาท (แต่เมื่อรวมกับประกันชีวิตทั่วไปต้องไม่เกิน 100,000 บาท)
-        - **ประกันบำนาญ:** ลดหย่อนได้ 15% ของรายได้ สูงสุด 200,000 บาท
-        - 🌐 [ตรวจสอบข้อมูลบริษัทประกัน: คปภ. (OIC)](https://www.oic.or.th/)
-        """)
+    col_filter, col_items = st.columns([1, 2.5], gap="large")
+    
+    # ด้านซ้าย: ตัวกรอง (Filters)
+    with col_filter:
+        st.markdown("#### ตัวกรอง (Filters)")
+        ins_gender = st.radio("เพศ", ["ชาย", "หญิง"], horizontal=True)
+        ins_age = st.number_input("อายุ", min_value=1, max_value=80, value=35)
+        ins_budget = st.number_input("งบประมาณเบี้ยประกัน (บาท/ปี)", value=50000, step=5000)
+        ins_type = st.selectbox("เป้าหมายหลัก", ["เน้นออมเงิน (สะสมทรัพย์)", "เน้นความคุ้มครอง", "ลดหย่อนหลังเกษียณ (บำนาญ)"])
+        ins_period = st.selectbox("ระยะเวลาชำระเบี้ย", ["จ่ายสั้น (1-5 ปี)", "จ่ายปานกลาง (6-10 ปี)", "จ่ายระยะยาว (10 ปีขึ้นไป)"])
         
-    with st.expander("📰 อัปเดตข่าวภาษีและลิงก์อื่นๆ ที่เป็นประโยชน์"):
-        st.write("""
-        - [ยื่นแบบภาษีออนไลน์ (e-Filing) กรมสรรพากร](https://efiling.rd.go.th/)
-        - [ตรวจสอบรายชื่อผู้ประกอบการ e-Tax Invoice](https://etax.rd.go.th/)
-        - [อ่านบทความภาษีเข้าใจง่ายจาก iTAX](https://www.itax.in.th/media/)
-        - [ติดตามข่าวสารการลงทุน: กรุงเทพธุรกิจ](https://www.bangkokbiznews.com/)
-        """)
+        st.button("ค้นหาแผนประกัน", use_container_width=True, type="primary")
+
+    # ด้านขวา: แสดงการ์ดผลลัพธ์ประกัน (Mock Data)
+    with col_items:
+        st.markdown("#### ผลการค้นหา (แนะนำสำหรับคุณ)")
+        
+        # ตัวอย่างแผนที่ 1
+        html_card1 = f"""
+        <div class="ins-card">
+            <div class="ins-title">Sasinapa SaveMax 10/5 ⭐️</div>
+            <div class="ins-company">โดย บริษัท ศศินภา ประกันชีวิต จำกัด (มหาชน)</div>
+            <p>✔ จ่ายเบี้ยสั้นเพียง <b>5 ปี</b> คุ้มครองยาว <b>10 ปี</b><br>
+            ✔ รับเงินคืนทุกปี ปีละ <span class="ins-highlight">5%</span><br>
+            ✔ ลดหย่อนภาษีได้สูงสุด 100,000 บาท/ปี</p>
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed #e2e8f0; padding-top: 10px;">
+                <div>
+                    <span style="font-size: 12px; color: #64748b;">เบี้ยประกันอ้างอิง</span><br>
+                    <span style="font-size: 20px; font-weight: bold;">฿ {ins_budget:,.0f} <span style="font-size: 14px; font-weight: normal;">/ ปี</span></span>
+                </div>
+                <a href="#" class="ins-btn">ดูรายละเอียด</a>
+            </div>
+        </div>
+        """
+        st.markdown(html_card1, unsafe_allow_html=True)
+
+        # ตัวอย่างแผนที่ 2
+        html_card2 = f"""
+        <div class="ins-card">
+            <div class="ins-title">Sasinapa Pension 85/5 (บำนาญลดหย่อนได้)</div>
+            <div class="ins-company">โดย บริษัท ศศินภา ประกันชีวิต จำกัด (มหาชน)</div>
+            <p>✔ จ่ายเบี้ยเพียง <b>5 ปี</b> รับบำนาญยาวถึงอายุ <b>85 ปี</b><br>
+            ✔ เหมาะสำหรับวางแผนเกษียณ รับบำนาญ <span class="ins-highlight">15%</span> ต่อปี<br>
+            ✔ ลดหย่อนภาษี (หมวดบำนาญ) ได้สูงสุด 200,000 บาท/ปี</p>
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed #e2e8f0; padding-top: 10px;">
+                <div>
+                    <span style="font-size: 12px; color: #64748b;">เบี้ยประกันอ้างอิง</span><br>
+                    <span style="font-size: 20px; font-weight: bold;">฿ {ins_budget:,.0f} <span style="font-size: 14px; font-weight: normal;">/ ปี</span></span>
+                </div>
+                <a href="#" class="ins-btn">ดูรายละเอียด</a>
+            </div>
+        </div>
+        """
+        st.markdown(html_card2, unsafe_allow_html=True)
+
+# ==========================================
+# แท็บที่ 4: แหล่งความรู้
+# ==========================================
+with main_tab4:
+    st.markdown("#### ตัวช่วยและแหล่งความรู้ในการบริหารภาษี")
+    with st.expander("📈 หุ้น (Stocks) และภาษี"):
+        st.write("- กำไรจากการขายหุ้น (Capital Gain): ยกเว้นภาษีในตลาด SET\n- เงินปันผล (Dividend): หัก ณ ที่จ่าย 10% (ขอเครดิตภาษีคืนได้)")
+    with st.expander("🥇 ทองคำ (Gold)"):
+        st.write("- ทองคำแท่ง/รูปพรรณ: กำไรจากการขายส่วนตัวยกเว้นภาษี")
+    with st.expander("📊 กองทุนรวม (Mutual Funds)"):
+        st.write("- Thai ESG / RMF / SSF สำหรับลดหย่อนภาษี")
+    with st.expander("📰 อัปเดตข่าวภาษีและลิงก์อื่นๆ"):
+        st.write("- [ยื่นแบบภาษีออนไลน์ กรมสรรพากร](https://efiling.rd.go.th/)\n- [ตรวจสอบ e-Tax Invoice](https://etax.rd.go.th/)")
 
 st.divider()
 
 # ----------------- Footer Sasinapa -----------------
 st.markdown("#### Sasinapa")
 f_col1, f_col2, f_col3 = st.columns([2, 1, 1])
-
 with f_col1:
     st.markdown("<span style='color: #6c757d; font-size: 14px;'>Sasinapa เกิดจากความเชื่อว่าผู้เสียภาษี คือฮีโร่ตัวจริงของประเทศนี้ เราจึงพัฒนาเทคโนโลยีที่ทำให้ภาษีเป็นเรื่องง่ายที่สุดสำหรับทุกคน เพราะนี่คือสิ่งที่ผู้เสียภาษีสมควรได้รับ</span>", unsafe_allow_html=True)
-
 with f_col2:
-    st.markdown("**บุคคลธรรมดา**")
-    st.markdown("<span style='color: #6c757d; font-size: 14px;'>คำนวณภาษี / วางแผนภาษี<br><br>บัญชีธนาคารเพื่อ e-commerce</span>", unsafe_allow_html=True)
-    st.markdown("<br>**บริษัท / ห้างหุ้นส่วน**", unsafe_allow_html=True)
-    st.markdown("<span style='color: #6c757d; font-size: 14px;'>จดทะเบียนบริษัท<br><br>โปรแกรมเงินเดือน</span>", unsafe_allow_html=True)
-
+    st.markdown("**บุคคลธรรมดา**\n<br><span style='color: #6c757d; font-size: 14px;'>คำนวณภาษี / วางแผนภาษี<br>บัญชีธนาคารเพื่อ e-commerce</span>", unsafe_allow_html=True)
 with f_col3:
-    st.markdown("**ลดหย่อนภาษี**")
-    st.markdown("<span style='color: #6c757d; font-size: 14px;'>ประกันชีวิต<br><br>ประกันออมทรัพย์<br><br>ประกันสุขภาพ<br><br>กองทุน RMF / Thai ESG</span>", unsafe_allow_html=True)
+    st.markdown("**ลดหย่อนภาษี**\n<br><span style='color: #6c757d; font-size: 14px;'>ประกันชีวิต<br>กองทุน RMF / Thai ESG</span>", unsafe_allow_html=True)
