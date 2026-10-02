@@ -3,140 +3,146 @@ import pandas as pd
 import plotly.express as px
 from tax_calculator import calculate_tax_breakdown, get_optimizer_tip
 
-# 1. ตั้งค่าหน้าเว็บให้ดูเรียบง่าย ไม่มีอิโมจิ
+# 1. ตั้งค่าหน้าเว็บ ซ่อน Sidebar และตั้งเป็นแบบ Centered เพื่อให้อ่านง่ายบนมือถือ
 st.set_page_config(
-    page_title="ระบบคำนวณภาษีเงินได้บุคคลธรรมดา",
-    layout="wide"
+    page_title="Sasinapa - ระบบคำนวณภาษี",
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
 
-# 2. ปรับแต่ง CSS สีตัวอักษรให้ดูเป็นทางการ (ใช้โทนสีเขียวคล้าย KBank)
+# 2. ปรับแต่ง CSS ลบเมนูรกๆ ออก, ทำ Footer แบบ iTAX, และปรับฟอนต์ให้คลีน
 st.markdown("""
     <style>
-    .stMetric label { font-weight: bold; color: #555555; }
-    h1, h2, h3 { color: #00A950; } 
+    /* ซ่อนเมนูแฮมเบอร์เกอร์และ Footer ของ Streamlit */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* ปรับแต่งช่องกรอกข้อมูลให้ใหญ่และกดง่ายบนมือถือ */
+    div[data-baseweb="input"] {
+        border-radius: 8px;
+    }
+    
+    /* สไตล์สำหรับ Footer แบบ Sasinapa (อ้างอิงจากต้นฉบับสีเขียวเข้ม) */
+    .sasinapa-footer {
+        background-color: #2E4B40;
+        color: #FFFFFF;
+        padding: 40px 20px;
+        margin-top: 60px;
+        border-radius: 10px 10px 0 0;
+        font-family: sans-serif;
+    }
+    .sasinapa-footer h2 {
+        color: #FFFFFF;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+    .sasinapa-footer h4 {
+        color: #FFFFFF;
+        font-weight: bold;
+        margin-top: 20px;
+        margin-bottom: 10px;
+        font-size: 16px;
+    }
+    .sasinapa-footer p {
+        color: #B0C4B1;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+    .sasinapa-footer a {
+        color: #B0C4B1;
+        text-decoration: none;
+        display: block;
+        margin-bottom: 8px;
+    }
+    .sasinapa-footer a:hover {
+        color: #FFFFFF;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("ระบบคำนวณและวางแผนภาษีเงินได้บุคคลธรรมดา")
-st.markdown("กรอกข้อมูลรายได้และค่าลดหย่อนของคุณเพื่อประเมินภาระภาษีเบื้องต้น")
+# ----------------- ส่วนหัวของเว็บ -----------------
+st.title("ระบบคำนวณภาษี Sasinapa")
+st.markdown("กรอกตัวเลขรายได้ของคุณ ระบบจะคำนวณภาษีให้ทันที (ไม่ต้องมีตัวเลขตั้งต้น พิมพ์ง่ายบนมือถือ)")
 
-# --- แถบด้านข้าง (Sidebar) สำหรับกรอกข้อมูล ---
-st.sidebar.header("ส่วนที่ 1: ข้อมูลรายได้")
-salary_monthly = st.sidebar.number_input("เงินเดือน (บาท/เดือน)", min_value=0, value=50000, step=1000)
-bonus_yearly = st.sidebar.number_input("โบนัสและเงินพิเศษ (บาท/ปี)", min_value=0, value=100000, step=5000)
-other_income = st.sidebar.number_input("รายได้อื่นๆ (บาท/ปี)", min_value=0, value=0, step=5000)
-wht_paid = st.sidebar.number_input("ภาษีหัก ณ ที่จ่ายสะสม (บาท)", min_value=0, value=15000, step=1000)
+# ----------------- ย้ายช่องกรอกข้อมูลมาไว้ตรงกลาง (ไม่ใช้ Sidebar) -----------------
+st.subheader("1. ข้อมูลรายได้ (บาท)")
+# ใช้ value=None และ placeholder เพื่อให้ช่องว่างเปล่าตอนเริ่ม พิมพ์บนมือถือได้เลยไม่ต้องกดลบ
+salary_input = st.number_input("เงินเดือนรวมทั้งปี", min_value=0, value=None, placeholder="เช่น 600000", step=10000)
+bonus_input = st.number_input("โบนัสและเงินพิเศษ", min_value=0, value=None, placeholder="เช่น 50000", step=5000)
+other_input = st.number_input("รายได้อื่นๆ", min_value=0, value=None, placeholder="0", step=5000)
+wht_input = st.number_input("ภาษีหัก ณ ที่จ่ายสะสม (ถ้ามี)", min_value=0, value=None, placeholder="0", step=1000)
 
-total_income = (salary_monthly * 12) + bonus_yearly + other_income
+# แปลงค่า None เป็น 0 เพื่อนำไปคำนวณ
+salary_yearly = salary_input if salary_input else 0
+bonus_yearly = bonus_input if bonus_input else 0
+other_income = other_input if other_input else 0
+wht_paid = wht_input if wht_input else 0
+
+total_income = salary_yearly + bonus_yearly + other_income
 deduct_expense = min(total_income * 0.5, 100000)
 
-st.sidebar.markdown("---")
-st.sidebar.header("ส่วนที่ 2: ข้อมูลค่าลดหย่อน")
+st.markdown("---")
+st.subheader("2. ข้อมูลค่าลดหย่อน (บาท)")
 personal_deduction = 60000
-sso = st.sidebar.number_input("เงินสมทบประกันสังคม", min_value=0, max_value=9000, value=9000)
-thai_esg = st.sidebar.number_input("กองทุน Thai ESG", min_value=0, max_value=300000, value=0, step=5000)
-rmf = st.sidebar.number_input("กองทุน RMF", min_value=0, max_value=500000, value=0, step=5000)
+sso_input = st.number_input("เงินสมทบประกันสังคม", min_value=0, max_value=9000, value=None, placeholder="สูงสุด 9000")
+thaiesg_input = st.number_input("กองทุน Thai ESG", min_value=0, max_value=300000, value=None, placeholder="0")
+rmf_input = st.number_input("กองทุน RMF", min_value=0, max_value=500000, value=None, placeholder="0")
+
+sso = sso_input if sso_input else 0
+thai_esg = thaiesg_input if thaiesg_input else 0
+rmf = rmf_input if rmf_input else 0
 
 total_deductions = personal_deduction + sso + thai_esg + rmf
 
-# --- การจัดแบ่งหน้าหลักด้วยระบบ Tabs ---
-tab1, tab2, tab3 = st.tabs(["สรุปผลการคำนวณ", "จำลองสถานการณ์ (What-If)", "อัปโหลดเอกสาร 50 ทวิ"])
+# ----------------- ส่วนแสดงผล -----------------
+st.markdown("---")
+st.subheader("📊 ภาระภาษีเบื้องต้น")
 
-# TAB 1: สรุปผลหลัก
-with tab1:
-    result = calculate_tax_breakdown(total_income, deduct_expense, total_deductions, wht_paid)
+# เรียกใช้ฟังก์ชันคำนวณ
+result = calculate_tax_breakdown(total_income, deduct_expense, total_deductions, wht_paid)
 
-    st.subheader("ผลการประเมินภาษี")
-    col1, col2, col3, col4 = st.columns(4)
+# แสดงผลแบบกล่องขนาดใหญ่
+col1, col2 = st.columns(2)
+col1.metric("รายได้รวมทั้งปี", f"{total_income:,.0f} บาท")
+col2.metric("เงินได้สุทธิ", f"{result['net_income']:,.0f} บาท")
 
-    col1.metric("รายได้รวมทั้งปี", f"{total_income:,.0f} บาท")
-    col2.metric("เงินได้สุทธิ", f"{result['net_income']:,.0f} บาท")
-    col3.metric("อัตราภาษีสูงสุด", f"{result['highest_rate_percent']}%")
+col3, col4 = st.columns(2)
+col3.metric("อัตราภาษีสูงสุด", f"{result['highest_rate_percent']}%")
 
-    diff = result["tax_difference"]
-    if diff > 0:
-        col4.metric("ภาษีที่ต้องชำระเพิ่ม", f"{diff:,.0f} บาท")
-    else:
-        col4.metric("ภาษีที่ได้รับคืน", f"{abs(diff):,.0f} บาท")
+diff = result["tax_difference"]
+if diff > 0:
+    col4.metric("ภาษีที่ต้องชำระเพิ่ม", f"{diff:,.0f} บาท")
+else:
+    col4.metric("ภาษีที่ได้รับคืน", f"{abs(diff):,.0f} บาท")
 
-    st.markdown("---")
-    st.subheader("ข้อเสนอแนะเพื่อการวางแผนภาษี")
-    st.info(get_optimizer_tip(result["highest_rate_percent"]))
+st.info(get_optimizer_tip(result["highest_rate_percent"]))
 
-    # กราฟและตาราง (เปลี่ยนโทนสีเป็นสีเขียวเรียบหรู)
-    chart_col, table_col = st.columns([1, 1])
-
-    with chart_col:
-        chart_data = pd.DataFrame({
-            "รายการ": ["ค่าใช้จ่ายตามกฎหมาย", "ค่าลดหย่อน", "เงินได้สุทธิ"],
-            "จำนวนเงิน": [deduct_expense, total_deductions, result["net_income"]]
-        })
-        # โทนสีเขียว 3 ระดับ
-        fig = px.pie(chart_data, values="จำนวนเงิน", names="รายการ", hole=0.5,
-                     color_discrete_sequence=['#A5D6A7', '#4CAF50', '#1B5E20'])
-        fig.update_layout(margin=dict(t=20, b=20, l=0, r=0))
-        st.plotly_chart(fig, use_container_width=True)
-
-    with table_col:
-        summary_table = pd.DataFrame({
-            "รายการ": [
-                "เงินได้พึงประเมิน",
-                "หัก ค่าใช้จ่าย",
-                "หัก ค่าลดหย่อน",
-                "เงินได้สุทธิ",
-                "ภาษีที่คำนวณได้",
-                "หัก ภาษีที่จ่ายล่วงหน้า",
-                "สรุปยอดภาษีสุทธิ"
-            ],
-            "จำนวนเงิน (บาท)": [
-                f"{total_income:,.2f}",
-                f"{deduct_expense:,.2f}",
-                f"{total_deductions:,.2f}",
-                f"{result['net_income']:,.2f}",
-                f"{result['tax_total']:,.2f}",
-                f"{wht_paid:,.2f}",
-                f"{abs(diff):,.2f} ({'ชำระเพิ่ม' if diff > 0 else 'ได้รับคืน'})"
-            ]
-        })
-        st.table(summary_table)
-
-        # ปุ่มดาวน์โหลดไฟล์ CSV
-        csv = summary_table.to_csv(index=False).encode('utf-8-sig')
-        st.download_button(
-            label="ดาวน์โหลดรายงานสรุป (CSV)",
-            data=csv,
-            file_name="tax_summary.csv",
-            mime="text/csv"
-        )
-
-# TAB 2: เครื่องมือจำลองสถานการณ์
-with tab2:
-    st.subheader("จำลองสถานการณ์วางแผนภาษี")
-    st.markdown("ทดลองปรับตัวเลขการลงทุนเพื่อดูความเปลี่ยนแปลงของภาษี โดยไม่กระทบกับข้อมูลหลัก")
-
-    sim_col1, sim_col2 = st.columns(2)
-    with sim_col1:
-        sim_thaiesg = st.slider("สมมติว่าซื้อกองทุน Thai ESG เพิ่ม (บาท)", 0, 300000, 0, step=5000)
-    with sim_col2:
-        sim_rmf = st.slider("สมมติว่าซื้อกองทุน RMF เพิ่ม (บาท)", 0, 500000, 0, step=5000)
-
-    sim_deductions = total_deductions + sim_thaiesg + sim_rmf
-    sim_result = calculate_tax_breakdown(total_income, deduct_expense, sim_deductions, wht_paid)
-
-    sim_diff = sim_result['tax_difference']
-    original_diff = result['tax_difference']
-    tax_saved = original_diff - sim_diff
-
-    st.markdown(f"**ผลการจำลอง:** หากคุณลงทุนเพิ่มเติมจำนวน {sim_thaiesg + sim_rmf:,.0f} บาท")
-    st.success(f"จะสามารถประหยัดภาษีได้เพิ่มขึ้น: {tax_saved:,.0f} บาท")
-    st.markdown(f"**ภาระภาษีสุทธิในสถานการณ์จำลอง:** {'ชำระเพิ่ม' if sim_diff > 0 else 'ได้รับคืน'} {abs(sim_diff):,.0f} บาท")
-
-# TAB 3: อัปโหลดเอกสาร
-with tab3:
-    st.subheader("ระบบอัปโหลดเอกสารประกอบ (50 ทวิ)")
-    st.markdown("อัปโหลดหนังสือรับรองการหักภาษี ณ ที่จ่าย เพื่อเก็บบันทึกหรือเตรียมดึงข้อมูลอัตโนมัติ")
-    
-    uploaded_file = st.file_uploader("ลากและวางไฟล์ หรือคลิกเพื่อเลือกไฟล์ (รองรับ PDF, JPG, PNG)", type=['pdf', 'jpg', 'png'])
-
-    if uploaded_file is not None:
-        st.success(f"อัปโหลดไฟล์ '{uploaded_file.name}' เสร็จสมบูรณ์")
+# ----------------- Footer แบบ Sasinapa -----------------
+footer_html = """
+<div class="sasinapa-footer">
+    <div style="display: flex; flex-wrap: wrap; gap: 30px;">
+        <div style="flex: 2; min-width: 250px;">
+            <h2>Sasinapa</h2>
+            <p>Sasinapa เกิดจากความเชื่อว่าผู้เสียภาษี คือฮีโร่ตัวจริงของประเทศนี้ เราจึงพัฒนาเทคโนโลยีที่ทำให้ภาษีเป็นเรื่องง่ายที่สุดสำหรับทุกคน เพราะนี่คือสิ่งที่ผู้เสียภาษีสมควรได้รับ</p>
+        </div>
+        <div style="flex: 1; min-width: 150px;">
+            <h4>บุคคลธรรมดา</h4>
+            <a href="#">คำนวณภาษี / วางแผนภาษี</a>
+            <a href="#">บัญชีธนาคารเพื่อ e-commerce</a>
+            
+            <h4>บริษัท / ห้างหุ้นส่วน</h4>
+            <a href="#">จดทะเบียนบริษัท</a>
+            <a href="#">โปรแกรมเงินเดือน</a>
+        </div>
+        <div style="flex: 1; min-width: 150px;">
+            <h4>ลดหย่อนภาษี</h4>
+            <a href="#">ประกันชีวิต</a>
+            <a href="#">ประกันออมทรัพย์</a>
+            <a href="#">ประกันสุขภาพ</a>
+            <a href="#">กองทุน RMF / Thai ESG</a>
+        </div>
+    </div>
+</div>
+"""
+st.markdown(footer_html, unsafe_allow_html=True)
